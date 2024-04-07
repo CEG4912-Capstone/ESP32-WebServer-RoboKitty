@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include <WebServer.h>
+#include <ArduinoJson.h>
 
 // add your network settings
 const char* ssid = "WIFI_NAME";
@@ -9,6 +10,15 @@ WebServer server(80);
 
 const int ledPin26 = 26;
 const int ledPin27 = 27;
+
+
+// handle preflight request options
+void handleOptions() {
+  server.sendHeader("Access-Control-Allow-Origin", "*");
+  server.sendHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
+  server.sendHeader("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  server.send(204); // No Content
+}
 
 void handlePost() {
   //allow origin
@@ -22,8 +32,57 @@ void handlePost() {
   String message = server.arg("plain"); // get the body
   Serial.print("POST Body: ");
   Serial.println(message);
+
+  // get json response
+  DynamicJsonDocument doc(1024 * 4); 
+  DeserializationError error = deserializeJson(doc, message);
+
+  if (error) {
+    Serial.print(F("deserializeJson() failed: "));
+    Serial.println(error.f_str());
+    server.send(400, "text/plain", "Invalid JSON");
+    return;
+  }
+
+  //list of commands
+  JsonArray commands = doc.as<JsonArray>();
+
+  for (JsonObject command : commands) {
+    // important command data
+    int steps = command["steps"];
+    const char* movementType = command["movementType"]; // 'Move' | 'Turn'
+    const char* direction = command["direction"]; // 'Forward' | 'Backward' | 'Right' | 'Left'
+
+    // gotta process command after command to preserve the sequence
+    if(movementType == "Move"){
+      if(direction == "Forward"){
+
+        // robot.forward(steps)
+        Serial.println("Forward: "+steps);
+
+      } else if(direction == "Backward"){
+
+        // robot.backward(steps)
+        Serial.println("Backward: "+steps);
+
+      }
+  
+    } else if(movementType == "Turn"){
+      if(direction == "Right"){
+
+        // robot.right(steps)
+        Serial.println("Turn right: "+steps);
+
+      } else if(direction == "Left"){
+
+        // robot.left(steps)
+        Serial.println("Turn left: "+steps);
+        
+      }
+    }
   
   server.send(200, "application/json", "{\"message\":\"request received\"}");
+  }
 }
 
 void setup() {
@@ -57,6 +116,7 @@ void setup() {
 
   // request from website
   server.on("/post", HTTP_POST, handlePost);
+  server.on("/post", HTTP_OPTIONS, handleOptions); // Handle preflight requests
 
   // start
   server.begin();
